@@ -9,9 +9,13 @@ import {
   Filter,
   CheckCircle2,
   Building2,
+  Download,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { Organization, Product, Warehouse } from '../types';
 import { INITIAL_WAREHOUSES } from '../data/mockDatabase';
+import { exportToCSV, exportToPDF } from '../utils/exportUtils';
 
 interface InventoryModuleProps {
   currentOrg: Organization;
@@ -129,6 +133,50 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     setIsTransferModalOpen(false);
   };
 
+  const currencySymbol = currentOrg.currency === 'INR' ? '₹' : '$';
+
+  const handleExportCSV = () => {
+    exportToCSV(
+      `Inventory_Catalog_${currentOrg.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`,
+      [
+        { label: 'SKU Code', key: 'sku' },
+        { label: 'Product Name', key: 'name' },
+        { label: 'Category', key: 'category' },
+        { label: 'Current Stock', key: 'currentStock' },
+        { label: 'Unit', key: 'unit' },
+        { label: `Cost Price (${currentOrg.currency})`, key: 'costPrice' },
+        { label: `Selling Price (${currentOrg.currency})`, key: 'sellingPrice' },
+        { label: 'Reorder Level', key: 'reorderLevel' },
+        { label: 'Stock Status', key: 'status' },
+        { label: 'Barcode', key: 'barcode' },
+      ],
+      filteredProducts
+    );
+  };
+
+  const handleExportPDF = () => {
+    exportToPDF({
+      title: 'Warehouse Inventory Catalog & Valuation Report',
+      subtitle: `Official Stock Ledger & Depot Audit for ${currentOrg.name}`,
+      organizationName: currentOrg.name,
+      columns: [
+        { label: 'SKU', key: 'sku' },
+        { label: 'Product Name', key: 'name' },
+        { label: 'Category', key: 'category' },
+        { label: 'Stock', key: 'currentStock', format: (v, row) => `${v} ${row.unit}` },
+        { label: `Cost`, key: 'costPrice', format: (v) => `${currencySymbol} ${v.toLocaleString()}` },
+        { label: `Price`, key: 'sellingPrice', format: (v) => `${currencySymbol} ${v.toLocaleString()}` },
+        { label: 'Status', key: 'status', format: (v) => v === 'low_stock' ? 'LOW STOCK' : 'IN STOCK' },
+      ],
+      data: filteredProducts,
+      summaryMetrics: [
+        { label: 'Filtered Catalog Items', value: filteredProducts.length },
+        { label: 'Total Valuation', value: `${currencySymbol} ${totalValuation.toLocaleString()}` },
+        { label: 'Low Stock Alerts', value: lowStockCount },
+      ],
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -144,15 +192,31 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="Download CSV of currently filtered inventory"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="Generate printable PDF of inventory catalog"
+          >
+            <FileText className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Export PDF</span>
+          </button>
+          <button
             onClick={() => setIsTransferModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
           >
             <ArrowRightLeft className="w-3.5 h-3.5" />
             <span>Warehouse Transfer</span>
           </button>
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Catalog Item</span>

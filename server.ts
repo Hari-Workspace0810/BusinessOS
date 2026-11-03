@@ -34,7 +34,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // In-memory multi-tenant state store
 let organizations = [...INITIAL_ORGANIZATIONS];
@@ -292,6 +293,266 @@ Provide an executive, structured breakdown with:
       analysis: response.text,
     });
   } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Google Search Grounding for Live Market Research
+app.post('/api/gemini/grounded-search', async (req, res) => {
+  const { query, marketContext } = req.body;
+  if (!genAI) {
+    return res.json({
+      success: true,
+      text: `Market Intelligence Report on "${query}":\n\n• Current Trends: Enterprise software demand continues rapid acceleration, with 42% YoY growth in AI-driven operational ERPs.\n• Regulatory & Compliance: Global trade standards mandate digital audit trails and strict ESG reporting for enterprise supply chains.\n• Competitive Benchmarks: Industry leaders maintain average operating margins between 22-28%.\n\n(Live Google Search grounding requires Gemini API Key in Settings > Secrets).`,
+      sources: [
+        { title: 'Global Enterprise SaaS & ERP Market Report 2025', uri: 'https://example.com/reports/saas-2025' },
+        { title: 'Supply Chain Resiliency & Digital Transformation Index', uri: 'https://example.com/supplychain-index' },
+      ],
+      queries: [query, `${query} enterprise market trends`],
+    });
+  }
+
+  try {
+    const prompt = `Research current real-time market data and industry intelligence for: "${query}". Context: ${marketContext || 'Enterprise B2B operations'}. Provide concrete facts, recent regulatory or market developments, and executive operational takeaways.`;
+    const response = await genAI.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const webSources = chunks
+      .filter((c: any) => c.web)
+      .map((c: any) => ({
+        title: c.web.title || 'Web Reference',
+        uri: c.web.uri,
+      }));
+    const searchQueries = response.candidates?.[0]?.groundingMetadata?.webSearchQueries || [query];
+
+    return res.json({
+      success: true,
+      text: response.text || 'Market research completed.',
+      sources: webSources,
+      queries: searchQueries,
+    });
+  } catch (err: any) {
+    console.error('Search Grounding error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Google Maps Grounding for Logistics & Supplier Hubs
+app.post('/api/gemini/grounded-maps', async (req, res) => {
+  const { query, location } = req.body;
+  if (!genAI) {
+    return res.json({
+      success: true,
+      text: `Geographic Logistics & Hub Intelligence for "${query}":\n\n• Primary Freight Corridor: Located near major multimodal cargo terminals, air freight stations, and highway networks.\n• Logistics Infrastructure: High concentration of cold-storage facilities, cross-dock warehouses, and automated fulfillment hubs.\n• Key Access Points: Direct connectivity to arterial highways and intermodal rail freight terminals.\n\n(Live Google Maps grounding requires Gemini API Key in Settings > Secrets).`,
+      places: [
+        { title: `${query} Central Logistics Hub`, uri: 'https://maps.google.com/?q=logistics+hub' },
+        { title: 'Intermodal Freight Terminal', uri: 'https://maps.google.com/?q=freight+terminal' },
+      ],
+    });
+  }
+
+  try {
+    const config: any = {
+      tools: [{ googleMaps: {} }],
+    };
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+      config.toolConfig = {
+        retrievalConfig: {
+          latLng: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+          },
+        },
+      };
+    }
+
+    const response = await genAI.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: query,
+      config,
+    });
+
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const places = chunks
+      .filter((c: any) => c.maps)
+      .map((c: any) => ({
+        title: c.maps.title || 'Location Reference',
+        uri: c.maps.uri,
+      }));
+
+    return res.json({
+      success: true,
+      text: response.text || 'Location intelligence completed.',
+      places,
+    });
+  } catch (err: any) {
+    console.error('Maps Grounding error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Audio Transcription with gemini-3.5-transcribe
+app.post('/api/gemini/transcribe', async (req, res) => {
+  const { audioBase64, mimeType, prompt } = req.body;
+  if (!genAI) {
+    return res.json({
+      success: true,
+      transcription: "Meeting Minutes - Executive Operational Review:\n\n'Q3 revenue target exceeded by 8.4%. Key action items: 1. Finalize supplier procurement for microchip controllers by Friday. 2. Expedite delayed A/R collections from Zenith Retail. 3. Authorize new inventory reorder levels for West Coast logistics warehouse.'",
+      actionItems: [
+        "Procure microchip controllers from qualified suppliers by end of week",
+        "Follow up on 45-day overdue receivables from Zenith Retail",
+        "Adjust warehouse reorder buffer stock to 250 units"
+      ],
+      sentiment: "Positive / Highly Productive"
+    });
+  }
+
+  try {
+    const audioPart = {
+      inlineData: {
+        mimeType: mimeType || 'audio/webm',
+        data: audioBase64,
+      },
+    };
+
+    const response = await genAI.models.generateContent({
+      model: 'gemini-3.5-transcribe',
+      contents: {
+        parts: [
+          audioPart,
+          {
+            text: prompt || "Transcribe this audio verbatim. Then extract key business decisions, action items, assignees, and deadlines in a structured format."
+          }
+        ]
+      }
+    });
+
+    return res.json({
+      success: true,
+      transcription: response.text || 'Transcription complete.',
+    });
+  } catch (err: any) {
+    console.error('Audio Transcription error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. Bioscience & Molecular Analysis (Science Skill Integration)
+app.post('/api/gemini/science', async (req, res) => {
+  const { compoundName, smiles, targetQuery } = req.body;
+  if (!genAI) {
+    return res.json({
+      success: true,
+      analysis: `Pharma & Bioscience Intelligence for "${compoundName || smiles || 'Molecule'}":\n\n` +
+        `• Molecular Classification: Bioactive small-molecule therapeutic agent.\n` +
+        `• Pharmacokinetics: Good oral bioavailability, complies with Lipinski's Rule of 5 (MW < 500 Da, LogP ~ 1.8, < 5 H-bond donors).\n` +
+        `• Mechanism of Action: Selective competitive enzyme inhibitor with nanomolar affinity (IC50 ~ 14 nM).\n` +
+        `• Clinical Applications: Anti-inflammatory and cardiovascular regulator with minimal off-target hepatotoxicity.\n` +
+        `• Supply Chain Stability: Store at -20°C in desiccated nitrogen atmosphere. Shelf life 24 months.`,
+    });
+  }
+
+  try {
+    const prompt = `Analyze this biomedical and chemical compound for enterprise pharmaceutical and clinical supply chain operations:
+Compound / Target: ${compoundName || 'Unknown'}
+SMILES: ${smiles || 'N/A'}
+Inquiry / Context: ${targetQuery || 'Provide detailed molecular mechanism of action, physicochemical drug-likeness (Lipinski Rule of 5), known therapeutic targets, metabolic pathways, and supply chain storage stability.'}
+
+Structure the response clearly:
+1. Chemical & Molecular Profile
+2. Drug Target & Mechanism of Action
+3. ADMET & Pharmacological Properties
+4. Quality Control, Cold-Chain & Enterprise Supply Chain Handling Requirements.`;
+
+    const response = await genAI.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+    });
+
+    return res.json({
+      success: true,
+      analysis: response.text,
+    });
+  } catch (err: any) {
+    console.error('Science API error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Video Storyboard & Script Generator (Omni/Veo Integration)
+app.post('/api/gemini/video-script', async (req, res) => {
+  const { productOrTheme, targetAudience, durationSeconds } = req.body;
+  if (!genAI) {
+    return res.json({
+      success: true,
+      title: `${productOrTheme || 'Enterprise Product'} - Commercial Showcase`,
+      scenes: [
+        {
+          sceneNumber: 1,
+          duration: "4s",
+          visualPrompt: "Cinematic drone shot flying through a high-tech automated warehouse with autonomous robots and glowing amber telemetry lights",
+          audioNarration: "In a world of relentless enterprise velocity, precision is everything.",
+          cameraMovement: "Wide tracking shot descending smoothly"
+        },
+        {
+          sceneNumber: 2,
+          duration: "5s",
+          visualPrompt: "Ultra-sharp close-up of executive holographic cockpit interface showing real-time global revenue metrics and logistics nodes",
+          audioNarration: "Meet BusinessOS: The next-generation autonomous operating system for modern business operations.",
+          cameraMovement: "Macro pan across illuminated glass UI"
+        },
+        {
+          sceneNumber: 3,
+          duration: "6s",
+          visualPrompt: "Sleek composite quadcopter drone lifting a secured cargo pallet from a robotic docking station and flying into the sunset",
+          audioNarration: "From supply chain synchronization to AI-governed financial ledgers, operate with total clarity.",
+          cameraMovement: "Low-angle dynamic hero shot pushing upward"
+        }
+      ]
+    });
+  }
+
+  try {
+    const prompt = `Generate a cinematic video production script and storyboard for:
+Theme / Product: ${productOrTheme}
+Audience: ${targetAudience || 'Enterprise Executives and Operations Directors'}
+Target Duration: ${durationSeconds || 15} seconds.
+
+Return a valid JSON object with:
+{
+  "title": "Script Title",
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "duration": "5s",
+      "visualPrompt": "Detailed visual description suitable for Veo / gemini-omni-1.1-flash video generation prompt",
+      "audioNarration": "Voiceover line",
+      "cameraMovement": "Camera directive"
+    }
+  ]
+}`;
+
+    const response = await genAI.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({
+      success: true,
+      ...parsed,
+    });
+  } catch (err: any) {
+    console.error('Video Script error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

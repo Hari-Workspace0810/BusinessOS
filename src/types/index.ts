@@ -10,7 +10,38 @@ export type Role =
   | 'employee'
   | 'auditor';
 
-export type CurrencyCode = 'INR' | 'USD' | 'EUR' | 'GBP';
+export type CurrencyCode = 'INR' | 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD' | 'JPY' | 'SGD' | 'AED' | 'CHF';
+
+export type OrganizationCategory =
+  | 'retail'
+  | 'manufacturing'
+  | 'services'
+  | 'technology'
+  | 'wholesale'
+  | 'healthcare'
+  | 'logistics'
+  | 'hospitality'
+  | 'nonprofit'
+  | 'education'
+  | 'construction'
+  | 'ecommerce'
+  | 'other';
+
+export interface AuditLogEntry {
+  id: string;
+  organizationId: string;
+  action: string;
+  category: 'finance' | 'inventory' | 'security' | 'compliance' | 'governance' | 'procurement' | 'system';
+  actorId: string;
+  actorName: string;
+  actorEmail?: string;
+  targetEntity: string;
+  targetEntityId: string;
+  description: string;
+  details?: Record<string, any>;
+  severity: 'info' | 'warning' | 'critical';
+  timestamp: string;
+}
 
 export interface User {
   id: string;
@@ -29,7 +60,7 @@ export interface Organization {
   legalName: string;
   gstin?: string;
   currency: CurrencyCode;
-  category: 'retail' | 'manufacturing' | 'services' | 'technology' | 'wholesale';
+  category: OrganizationCategory;
   email: string;
   phone: string;
   address: string;

@@ -36,9 +36,23 @@ import {
   INITIAL_WORKFLOWS,
   INITIAL_DOCUMENTS,
   INITIAL_ANNOUNCEMENTS,
-  INITIAL_USERS,
 } from './data/mockDatabase';
 import { api } from './services/api';
+import {
+  fetchOrganizationsFromFirestore,
+  saveOrganizationToFirestore,
+  subscribeToOrganizations,
+  fetchTransactionsFromFirestore,
+  saveTransactionToFirestore,
+  reverseTransactionInFirestore,
+  subscribeToTransactions,
+  fetchProductsFromFirestore,
+  saveProductToFirestore,
+  updateProductStockInFirestore,
+  subscribeToProducts,
+  logAuditEvent,
+} from './services/firestoreService';
+import { AuthWrapper } from './components/AuthWrapper';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { ExecutiveDashboard } from './components/ExecutiveDashboard';
@@ -58,9 +72,27 @@ import { SubscriptionModule } from './components/SubscriptionModule';
 import { SuperAdminModule } from './components/SuperAdminModule';
 import { WorkflowsModule } from './components/WorkflowsModule';
 import { NewOrgWizard } from './components/NewOrgWizard';
+import { SupplyChainGame3D } from './components/SupplyChainGame3D';
+import { GroundedIntelligenceModule } from './components/GroundedIntelligenceModule';
+import { AudioIntelligenceModule } from './components/AudioIntelligenceModule';
+import { BioscienceModule } from './components/BioscienceModule';
+import { AuditLogModule } from './components/AuditLogModule';
 import { Bell, AlertTriangle } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 
-export default function App() {
+interface BusinessOSAppProps {
+  authenticatedUser: FirebaseUser;
+  mappedUser: User;
+  initialOrg: Organization;
+  onSignOut: () => Promise<void>;
+}
+
+function BusinessOSApp({
+  authenticatedUser,
+  mappedUser,
+  initialOrg,
+  onSignOut,
+}: BusinessOSAppProps) {
   // Theme state
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
@@ -75,12 +107,12 @@ export default function App() {
 
   // Multi-tenant core state
   const [organizations, setOrganizations] = useState<Organization[]>(INITIAL_ORGANIZATIONS);
-  const [currentOrg, setCurrentOrg] = useState<Organization>(INITIAL_ORGANIZATIONS[0]);
+  const [currentOrg, setCurrentOrg] = useState<Organization>(initialOrg);
   const [branches, setBranches] = useState<Branch[]>(INITIAL_BRANCHES);
   const [currentBranch, setCurrentBranch] = useState<Branch>(INITIAL_BRANCHES[0]);
 
   // Current User with active Role
-  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[0]);
+  const [currentUser, setCurrentUser] = useState<User>(mappedUser);
 
   // Interconnected Application Entities
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(INITIAL_TRANSACTIONS);
@@ -105,6 +137,52 @@ export default function App() {
   const [isNewOrgModalOpen, setIsNewOrgModalOpen] = useState<boolean>(false);
   const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(null);
 
+  // -------------------------------------------------------------
+  // FIRESTORE PERSISTENCE & REAL-TIME HOOKS
+  // -------------------------------------------------------------
+
+  // 1. Fetch & Subscribe Organizations from Firestore
+  useEffect(() => {
+    fetchOrganizationsFromFirestore().then((orgs) => {
+      if (orgs && orgs.length > 0) {
+        setOrganizations(orgs);
+      }
+    });
+
+    const unsub = subscribeToOrganizations((orgs) => {
+      if (orgs && orgs.length > 0) {
+        setOrganizations(orgs);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // 2. Fetch & Subscribe Transactions scoped by currentOrg.id for Tenant Isolation
+  useEffect(() => {
+    if (!currentOrg?.id) return;
+    fetchTransactionsFromFirestore(currentOrg.id).then((txs) => {
+      setTransactions(txs);
+    });
+
+    const unsub = subscribeToTransactions(currentOrg.id, (txs) => {
+      setTransactions(txs);
+    });
+    return () => unsub();
+  }, [currentOrg.id]);
+
+  // 3. Fetch & Subscribe Products scoped by currentOrg.id for Tenant Isolation
+  useEffect(() => {
+    if (!currentOrg?.id) return;
+    fetchProductsFromFirestore(currentOrg.id).then((prods) => {
+      setProducts(prods);
+    });
+
+    const unsub = subscribeToProducts(currentOrg.id, (prods) => {
+      setProducts(prods);
+    });
+    return () => unsub();
+  }, [currentOrg.id]);
+
   // Switch organization helper
   const handleSelectOrg = (org: Organization) => {
     setCurrentOrg(org);
@@ -124,9 +202,27 @@ export default function App() {
     setCurrentUser((prev) => ({ ...prev, role }));
   };
 
-  // Register New Organization
+  // Register New Organization -> Persists to Firestore
   const handleCreateOrganization = async (newOrgData: Partial<Organization>) => {
     const created = await api.createOrganization(newOrgData);
+    try {
+      await saveOrganizationToFirestore(created);
+      await logAuditEvent({
+        organizationId: created.id,
+        action: 'ORGANIZATION_CREATED',
+        category: 'governance',
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorEmail: currentUser.email,
+        targetEntity: 'Organization',
+        targetEntityId: created.id,
+        description: `New organization registered: ${created.name} (${created.category.toUpperCase()}) with base currency ${created.currency}.`,
+        details: { plan: created.plan, category: created.category, currency: created.currency },
+        severity: 'info',
+      });
+    } catch (err) {
+      console.warn('Firestore saveOrganization fallback:', err);
+    }
     setOrganizations((prev) => [...prev, created]);
     setCurrentOrg(created);
 
@@ -136,8 +232,8 @@ export default function App() {
       organizationId: created.id,
       name: `${created.name} Headquarters`,
       code: 'HQ-01',
-      city: 'Mumbai',
-      state: 'Maharashtra',
+      city: 'Global HQ',
+      state: 'State',
       address: created.address,
       isMain: true,
       managerName: currentUser.name,
@@ -151,9 +247,27 @@ export default function App() {
   // Interconnected Business Operations Handlers
   // -------------------------------------------------------------
 
-  // 1. Financial Transactions & Reversals
+  // 1. Financial Transactions & Reversals -> Persists to Firestore
   const handleAddTransaction = async (txData: Partial<FinancialTransaction>) => {
     const created = await api.createTransaction(txData);
+    try {
+      await saveTransactionToFirestore(created);
+      await logAuditEvent({
+        organizationId: currentOrg.id,
+        action: 'TRANSACTION_RECORDED',
+        category: 'finance',
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorEmail: currentUser.email,
+        targetEntity: 'FinancialTransaction',
+        targetEntityId: created.id,
+        description: `New ledger entry booked: ${created.type.toUpperCase()} of ${currentOrg.currency} ${created.amount.toLocaleString()} (${created.category}).`,
+        details: { amount: created.amount, reference: created.reference, type: created.type },
+        severity: 'info',
+      });
+    } catch (err) {
+      console.warn('Firestore saveTransaction fallback:', err);
+    }
     setTransactions((prev) => [created, ...prev]);
   };
 
@@ -171,13 +285,38 @@ export default function App() {
       status: 'completed',
     };
 
+    try {
+      await reverseTransactionInFirestore(txId, reversalTx);
+      await logAuditEvent({
+        organizationId: currentOrg.id,
+        action: 'TRANSACTION_REVERSED',
+        category: 'finance',
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorEmail: currentUser.email,
+        targetEntity: 'FinancialTransaction',
+        targetEntityId: txId,
+        description: `CRITICAL FINANCIAL REVERSAL: Reversal transaction ${reversalTx.id} posted against original ${target.reference} for amount ${currentOrg.currency} ${target.amount.toLocaleString()}.`,
+        details: {
+          originalTxId: txId,
+          reversalTxId: reversalTx.id,
+          amount: target.amount,
+          reference: target.reference,
+          reversedAt: new Date().toISOString(),
+        },
+        severity: 'critical',
+      });
+    } catch (err) {
+      console.warn('Firestore reverseTransaction fallback:', err);
+    }
+
     setTransactions((prev) =>
       prev.map((t) => (t.id === txId ? { ...t, status: 'reversed' } : t))
     );
     setTransactions((prev) => [reversalTx, ...prev]);
   };
 
-  // 2. POS Sale Completed -> Updates Invoices, Ledger, and Decrements Stock
+  // 2. POS Sale Completed -> Updates Invoices, Ledger, and Decrements Stock in Firestore
   const handleCompleteSale = async (invoicePayload: Partial<Invoice>) => {
     const createdInv = await api.createInvoice(invoicePayload);
     setInvoices((prev) => [createdInv, ...prev]);
@@ -198,15 +337,24 @@ export default function App() {
       status: 'completed',
       taxAmount: createdInv.totalTax,
     };
+
+    try {
+      await saveTransactionToFirestore(newIncomeTx);
+    } catch (err) {
+      console.warn('Firestore saveTransaction fallback:', err);
+    }
     setTransactions((prev) => [newIncomeTx, ...prev]);
 
-    // Decrement inventory stock
+    // Decrement inventory stock in Firestore
     if (createdInv.items) {
       setProducts((prev) =>
         prev.map((prod) => {
           const item = createdInv.items.find((i) => i.productId === prod.id);
           if (item) {
             const nextStock = Math.max(0, prod.currentStock - item.quantity);
+            updateProductStockInFirestore(prod.id, nextStock).catch((err) =>
+              console.warn('Firestore updateProductStock fallback:', err)
+            );
             return {
               ...prod,
               currentStock: nextStock,
@@ -225,9 +373,14 @@ export default function App() {
     setInvoices((prev) => [created, ...prev]);
   };
 
-  // 4. Products & Stock Transfers
+  // 4. Products & Stock Transfers -> Persists to Firestore
   const handleAddProduct = async (productData: Partial<Product>) => {
     const created = await api.createProduct(productData);
+    try {
+      await saveProductToFirestore(created);
+    } catch (err) {
+      console.warn('Firestore saveProduct fallback:', err);
+    }
     setProducts((prev) => [created, ...prev]);
   };
 
@@ -238,7 +391,27 @@ export default function App() {
     quantity: number;
   }) => {
     await api.transferStock(data);
-    // Refresh products view
+    const existing = products.find((p) => p.id === data.productId);
+    if (existing) {
+      const updated = { ...existing, warehouseId: data.toWarehouseId };
+      saveProductToFirestore(updated).catch((err) =>
+        console.warn('Firestore saveProduct fallback:', err)
+      );
+
+      logAuditEvent({
+        organizationId: currentOrg.id,
+        action: 'STOCK_TRANSFER_EXECUTED',
+        category: 'inventory',
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorEmail: currentUser.email,
+        targetEntity: 'Product',
+        targetEntityId: data.productId,
+        description: `Depot stock transfer authorized: ${data.quantity} units of ${existing.name} (${existing.sku}) relocated from depot ${data.fromWarehouseId} to ${data.toWarehouseId}.`,
+        details: { ...data, productName: existing.name, sku: existing.sku },
+        severity: 'info',
+      }).catch((err) => console.warn('Audit log fallback:', err));
+    }
     setProducts((prev) =>
       prev.map((p) =>
         p.id === data.productId ? { ...p, warehouseId: data.toWarehouseId } : p
@@ -283,60 +456,62 @@ export default function App() {
     );
   };
 
-  // 7. Procurement: Create PO, Approve PO, and GRN Receipt (Auto-stocks + Accounts Payable)
+  // 7. Procurement: Create PO, Approve PO, Receive Goods (GRN)
   const handleCreatePO = async (poData: Partial<PurchaseOrder>) => {
     const created = await api.createPurchaseOrder(poData);
     setPurchaseOrders((prev) => [created, ...prev]);
   };
 
-  const handleUpdatePOStatus = async (id: string, status: PurchaseOrder['status']) => {
-    await api.updatePOStatus(id, status);
+  const handleUpdatePOStatus = async (
+    poId: string,
+    status: PurchaseOrder['status']
+  ) => {
+    const target = purchaseOrders.find((p) => p.id === poId);
+    if (!target) return;
+
+    await api.updatePOStatus(poId, status);
     setPurchaseOrders((prev) =>
-      prev.map((po) => {
-        if (po.id === id) {
-          // If received, replenish stock and record expense
-          if (status === 'received') {
-            for (const item of po.items) {
-              setProducts((pList) =>
-                pList.map((p) =>
-                  p.id === item.productId
-                    ? {
-                        ...p,
-                        currentStock: p.currentStock + item.quantity,
-                        status:
-                          p.currentStock + item.quantity > p.reorderLevel
-                            ? 'in_stock'
-                            : 'low_stock',
-                      }
-                    : p
-                )
-              );
-            }
-            // Add expense transaction for accounts payable
-            setTransactions((txList) => [
-              {
-                id: `tx-${Date.now()}`,
-                organizationId: po.organizationId,
-                branchId: po.branchId,
-                type: 'expense',
-                category: 'Vendor Goods Received (GRN)',
-                amount: po.totalAmount,
-                currency: currentOrg.currency,
-                date: new Date().toISOString().split('T')[0],
-                description: `Settled GRN fulfillment for ${po.poNumber} from ${po.supplierName}`,
-                reference: `GRN-${Date.now().toString().slice(-6)}`,
-                paymentMethod: 'bank_transfer',
-                status: 'completed',
-                taxAmount: Math.round(po.totalAmount * 0.18),
-              },
-              ...txList,
-            ]);
-          }
-          return { ...po, status };
-        }
-        return po;
-      })
+      prev.map((p) => (p.id === poId ? { ...p, status } : p))
     );
+
+    // If Goods Received (GRN), auto increment inventory and create accounts payable expense
+    if (status === 'received') {
+      const expenseTx: FinancialTransaction = {
+        id: `tx-${Date.now()}`,
+        organizationId: target.organizationId,
+        branchId: target.branchId,
+        type: 'expense',
+        category: 'Cost of Goods Sold (COGS)',
+        amount: target.totalAmount,
+        currency: currentOrg.currency,
+        date: new Date().toISOString().split('T')[0],
+        description: `GRN Settlement for PO #${target.poNumber} (${target.supplierName})`,
+        reference: `GRN-${target.poNumber}`,
+        paymentMethod: 'bank_transfer',
+        status: 'completed',
+        taxAmount: 0,
+      };
+      handleAddTransaction(expenseTx);
+
+      // Increment inventory item stock
+      setProducts((prev) =>
+        prev.map((prod) => {
+          const item = target.items.find((i) => i.productId === prod.id);
+          if (item) {
+            const nextStock = prod.currentStock + item.quantity;
+            updateProductStockInFirestore(prod.id, nextStock).catch((e) =>
+              console.warn(e)
+            );
+            return {
+              ...prod,
+              currentStock: nextStock,
+              status: nextStock <= prod.reorderLevel ? 'low_stock' : 'in_stock',
+            };
+          }
+          return prod;
+        })
+      );
+    }
   };
 
   // 8. Projects & Task Board
@@ -345,41 +520,64 @@ export default function App() {
     setTasks((prev) => [...prev, created]);
   };
 
-  const handleUpdateTaskStatus = async (id: string, status: Task['status']) => {
-    await api.updateTaskStatus(id, status);
+  const handleUpdateTaskStatus = async (taskId: string, status: Task['status']) => {
+    await api.updateTaskStatus(taskId, status);
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, status } : t))
     );
   };
 
-  // 9. Workflows toggle
-  const handleToggleWorkflow = async (id: string) => {
-    await api.toggleWorkflow(id);
+  // 9. Workflows: Toggle rules
+  const handleToggleWorkflow = async (ruleId: string) => {
+    await api.toggleWorkflow(ruleId);
     setWorkflows((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, isEnabled: !w.isEnabled } : w))
+      prev.map((w) => (w.id === ruleId ? { ...w, isEnabled: !w.isEnabled } : w))
     );
   };
 
-  // 10. Documents
+  // 10. Documents Upload
   const handleUploadDocument = async (docData: Partial<BusinessDocument>) => {
     const created = await api.createDocument(docData);
     setDocuments((prev) => [created, ...prev]);
   };
 
-  // 11. Subscription Plan Update
+  // 11. SaaS Plan Upgrade
   const handleUpdatePlan = (newPlan: Organization['plan']) => {
-    setCurrentOrg((prev) => ({ ...prev, plan: newPlan }));
+    const updated = { ...currentOrg, plan: newPlan };
+    setCurrentOrg(updated);
+    saveOrganizationToFirestore(updated).catch((e) => console.warn(e));
     setOrganizations((prev) =>
-      prev.map((o) => (o.id === currentOrg.id ? { ...o, plan: newPlan } : o))
+      prev.map((o) => (o.id === currentOrg.id ? updated : o))
     );
   };
 
-  // Active announcement
-  const activeAnnouncement = announcements.find((a) => a.id !== dismissedAnnouncementId);
+  const activeAnnouncement = announcements.find(
+    (a) => a.id !== dismissedAnnouncementId
+  );
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors">
-      {/* Global Top Navigation Bar */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
+      {/* System Announcement Banner */}
+      {activeAnnouncement && (
+        <aside
+          aria-label="System announcement"
+          className="bg-emerald-600 dark:bg-emerald-700 text-white px-4 py-2 text-xs flex items-center justify-between shadow-sm z-50 select-none"
+        >
+          <div className="flex items-center gap-2 max-w-7xl mx-auto flex-1">
+            <Bell className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-semibold">{activeAnnouncement.title}:</span>
+            <span className="opacity-90">{activeAnnouncement.message}</span>
+          </div>
+          <button
+            onClick={() => setDismissedAnnouncementId(activeAnnouncement.id)}
+            className="text-xs hover:opacity-80 underline ml-4 cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </aside>
+      )}
+
+      {/* Primary Top Navigation Bar */}
       <TopBar
         currentOrg={currentOrg}
         organizations={organizations}
@@ -394,30 +592,11 @@ export default function App() {
         onOpenNewOrgModal={() => setIsNewOrgModalOpen(true)}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        onSignOut={onSignOut}
       />
 
-      {/* Broadcast Announcement Banner if active */}
-      {activeAnnouncement && (
-        <div className="bg-slate-900 text-white dark:bg-slate-800 px-6 py-2 text-xs flex items-center justify-between border-b border-slate-700">
-          <div className="flex items-center gap-2">
-            <Bell className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-emerald-300">
-              [{activeAnnouncement.title}]:
-            </span>
-            <span className="text-slate-300">{activeAnnouncement.message}</span>
-          </div>
-          <button
-            onClick={() => setDismissedAnnouncementId(activeAnnouncement.id)}
-            className="text-slate-400 hover:text-white font-bold ml-4"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Main Workspace Frame */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Collapsible Enterprise Sidebar */}
+        {/* Collapsible Left Navigation Sidebar */}
         <Sidebar
           activeTab={activeTab}
           onSelectTab={setActiveTab}
@@ -436,8 +615,12 @@ export default function App() {
         />
 
         {/* Central Viewport Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+        <main
+          className={`flex-1 overflow-y-auto ${
+            activeTab === 'drone_sim_3d' ? 'p-0' : 'p-4 sm:p-6 lg:p-8'
+          }`}
+        >
+          <div className={activeTab === 'drone_sim_3d' ? 'w-full h-full' : 'max-w-7xl mx-auto'}>
             {activeTab === 'dashboard' && (
               <ExecutiveDashboard
                 currentOrg={currentOrg}
@@ -555,8 +738,31 @@ export default function App() {
               <AIAssistantModule currentOrg={currentOrg} />
             )}
 
+            {activeTab === 'grounded_ai' && (
+              <GroundedIntelligenceModule />
+            )}
+
+            {activeTab === 'audio_ai' && (
+              <AudioIntelligenceModule />
+            )}
+
+            {activeTab === 'bioscience' && (
+              <BioscienceModule />
+            )}
+
+            {activeTab === 'drone_sim_3d' && (
+              <SupplyChainGame3D />
+            )}
+
             {activeTab === 'simulator' && (
               <AdvancedSimulatorModule currentOrg={currentOrg} />
+            )}
+
+            {activeTab === 'audit_log' && (
+              <AuditLogModule
+                currentOrg={currentOrg}
+                currentUser={currentUser}
+              />
             )}
 
             {activeTab === 'documents' && (
@@ -596,5 +802,20 @@ export default function App() {
         onCreateOrg={handleCreateOrganization}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthWrapper>
+      {({ authenticatedUser, mappedUser, initialOrg, onSignOut }) => (
+        <BusinessOSApp
+          authenticatedUser={authenticatedUser}
+          mappedUser={mappedUser}
+          initialOrg={initialOrg}
+          onSignOut={onSignOut}
+        />
+      )}
+    </AuthWrapper>
   );
 }

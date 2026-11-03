@@ -378,6 +378,118 @@ export const api = {
     });
   },
 
+  async searchGrounding(query: string, marketContext?: string): Promise<{
+    success: boolean;
+    text: string;
+    sources: Array<{ title: string; uri: string }>;
+    queries: string[];
+  }> {
+    return safeFetch('/api/gemini/grounded-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, marketContext }),
+    }, {
+      success: true,
+      text: `Market Intelligence Report on "${query}":\n\n• Trends: Global demand continues accelerating across automated SaaS ERP and supply chain operations.\n• Regulatory: Compliance mandates strict digital audit trails and ESG reporting.\n• Margin benchmarks: Typical high-performing enterprise margins range from 22% to 28%.`,
+      sources: [
+        { title: 'Global Enterprise SaaS & ERP Market Report 2025', uri: 'https://example.com/reports/saas-2025' },
+        { title: 'Supply Chain Resiliency Index', uri: 'https://example.com/supplychain-index' },
+      ],
+      queries: [query, `${query} enterprise market trends`],
+    });
+  },
+
+  async mapsGrounding(query: string, location?: { latitude: number; longitude: number }): Promise<{
+    success: boolean;
+    text: string;
+    places: Array<{ title: string; uri: string }>;
+  }> {
+    return safeFetch('/api/gemini/grounded-maps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, location }),
+    }, {
+      success: true,
+      text: `Geographic Logistics & Hub Intelligence for "${query}": Multimodal logistics access with rail corridors and direct port expressways.`,
+      places: [
+        { title: `${query} Central Logistics Hub`, uri: 'https://maps.google.com/?q=logistics+hub' },
+        { title: 'Intermodal Freight Terminal', uri: 'https://maps.google.com/?q=freight+terminal' },
+      ],
+    });
+  },
+
+  async transcribeAudio(audioBase64: string, mimeType?: string, prompt?: string): Promise<{
+    success: boolean;
+    transcription: string;
+  }> {
+    return safeFetch('/api/gemini/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioBase64, mimeType, prompt }),
+    }, {
+      success: true,
+      transcription: "Executive Meeting Transcript: 'Review completed. Approved PO for thermal sensors. A/R collection follow-ups scheduled for Friday.'",
+    });
+  },
+
+  async analyzeBioscience(compoundName?: string, smiles?: string, targetQuery?: string): Promise<{
+    success: boolean;
+    analysis: string;
+  }> {
+    return safeFetch('/api/gemini/science', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ compoundName, smiles, targetQuery }),
+    }, {
+      success: true,
+      analysis: `Pharma & Bioscience Intelligence for "${compoundName || smiles || 'Molecule'}": Small-molecule therapeutic agent compliant with Lipinski's Rule of 5. Shelf life 24 months at -20°C.`,
+    });
+  },
+
+  async generateVideoScript(productOrTheme: string, targetAudience?: string, durationSeconds?: number): Promise<{
+    success: boolean;
+    title: string;
+    scenes: Array<{
+      sceneNumber: number;
+      duration: string;
+      visualPrompt: string;
+      audioNarration: string;
+      cameraMovement: string;
+    }>;
+  }> {
+    return safeFetch('/api/gemini/video-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productOrTheme, targetAudience, durationSeconds }),
+    }, {
+      success: true,
+      title: `${productOrTheme} - Enterprise Commercial Showcase`,
+      scenes: [
+        {
+          sceneNumber: 1,
+          duration: '4s',
+          visualPrompt: 'Cinematic drone shot flying through a high-tech automated warehouse with autonomous robots and glowing amber telemetry lights',
+          audioNarration: 'In a world of relentless enterprise velocity, precision is everything.',
+          cameraMovement: 'Wide tracking shot descending smoothly',
+        },
+        {
+          sceneNumber: 2,
+          duration: '5s',
+          visualPrompt: 'Ultra-sharp close-up of executive holographic cockpit interface showing real-time global revenue metrics and logistics nodes',
+          audioNarration: 'Meet BusinessOS: The next-generation autonomous operating system for modern business operations.',
+          cameraMovement: 'Macro pan across illuminated glass UI',
+        },
+        {
+          sceneNumber: 3,
+          duration: '6s',
+          visualPrompt: 'Sleek composite quadcopter drone lifting a secured cargo pallet from a robotic docking station and flying into the sunset',
+          audioNarration: 'From supply chain synchronization to AI-governed financial ledgers, operate with total clarity.',
+          cameraMovement: 'Low-angle dynamic hero shot pushing upward',
+        },
+      ],
+    });
+  },
+
   async getSuperAdminStats() {
     return safeFetch('/api/superadmin/stats', undefined, {
       totalOrganizations: 2,

@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "organization": {
+      "title": "Organization",
+      "description": "Tenant organization profile and configuration",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "legalName": { "type": "string" },
+        "currency": { "type": "string" },
+        "plan": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "currency"]
+    },
+    "user": {
+      "title": "User",
+      "description": "User profile with role-based access",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "organizationId": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "transaction": {
+      "title": "Financial Transaction",
+      "description": "Ledger financial transaction record",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["organizationId", "type", "amount"]
+    },
+    "product": {
+      "title": "Inventory Product",
+      "description": "Inventory product item record",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "currentStock": { "type": "number" }
+      },
+      "required": ["organizationId", "name", "sku"]
+    },
+    "auditLog": {
+      "title": "Audit Log",
+      "description": "Immutable real-time audit event entry for compliance and tracking",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "action": { "type": "string" },
+        "category": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "targetEntity": { "type": "string" },
+        "targetEntityId": { "type": "string" },
+        "description": { "type": "string" },
+        "severity": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["organizationId", "action", "actorId", "description", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/organizations/{organizationId}": {
+      "schema": "#/entities/organization",
+      "description": "Registered tenant organizations"
+    },
+    "/users/{userId}": {
+      "schema": "#/entities/user",
+      "description": "User profiles and credentials"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "#/entities/transaction",
+      "description": "Financial ledger transactions"
+    },
+    "/products/{productId}": {
+      "schema": "#/entities/product",
+      "description": "Inventory catalog products"
+    },
+    "/auditLogs/{auditLogId}": {
+      "schema": "#/entities/auditLog",
+      "description": "Real-time enterprise audit trail events"
+    }
+  }
+}

@@ -100,30 +100,44 @@ export const NewOrgWizard: React.FC<NewOrgWizardProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-500 font-medium mb-1">Industry Category</label>
+              <label className="block text-slate-500 font-medium mb-1">Industry Sector</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as any)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 capitalize"
               >
-                <option value="manufacturing">Manufacturing & Heavy Engineering</option>
-                <option value="retail">Retail & Direct to Consumer</option>
-                <option value="wholesale">Wholesale & B2B Distribution</option>
-                <option value="technology">Technology & SaaS</option>
+                <option value="retail">Retail & Direct-to-Consumer</option>
+                <option value="manufacturing">Manufacturing & Heavy Industry</option>
                 <option value="services">Professional Services & Consulting</option>
+                <option value="technology">Technology, SaaS & Software</option>
+                <option value="wholesale">Wholesale & B2B Distribution</option>
+                <option value="healthcare">Healthcare, Biotech & Clinics</option>
+                <option value="logistics">Logistics, Freight & Supply Chain</option>
+                <option value="hospitality">Hospitality, Food & Leisure</option>
+                <option value="nonprofit">Non-Profit & Humanitarian</option>
+                <option value="education">Education & Academic Institutions</option>
+                <option value="construction">Construction & Civil Contracting</option>
+                <option value="ecommerce">E-Commerce & Digital Merchandising</option>
+                <option value="other">Other / Specialized Enterprise</option>
               </select>
             </div>
             <div>
-              <label className="block text-slate-500 font-medium mb-1">Base Currency</label>
+              <label className="block text-slate-500 font-medium mb-1">Operating Currency</label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as any)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold"
               >
-                <option value="INR">INR (₹) - Indian Rupee (Default)</option>
                 <option value="USD">USD ($) - US Dollar</option>
+                <option value="INR">INR (₹) - Indian Rupee</option>
                 <option value="EUR">EUR (€) - Euro</option>
                 <option value="GBP">GBP (£) - British Pound</option>
+                <option value="CAD">CAD ($) - Canadian Dollar</option>
+                <option value="AUD">AUD ($) - Australian Dollar</option>
+                <option value="JPY">JPY (¥) - Japanese Yen</option>
+                <option value="SGD">SGD ($) - Singapore Dollar</option>
+                <option value="AED">AED (د.إ) - UAE Dirham</option>
+                <option value="CHF">CHF (Fr) - Swiss Franc</option>
               </select>
             </div>
           </div>

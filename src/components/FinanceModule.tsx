@@ -9,8 +9,10 @@ import {
   Filter,
   CheckCircle,
   FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { Organization, Branch, FinancialTransaction, Invoice } from '../types';
+import { exportToCSV, exportToPDF } from '../utils/exportUtils';
 
 interface FinanceModuleProps {
   currentOrg: Organization;
@@ -114,26 +116,46 @@ export const FinanceModule: React.FC<FinanceModuleProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['Date', 'Type', 'Category', 'Description', 'Amount', 'Tax', 'Payment Method', 'Status', 'Reference'];
-    const rows = orgTransactions.map((t) => [
-      t.date,
-      t.type,
-      `"${t.category}"`,
-      `"${t.description.replace(/"/g, '""')}"`,
-      t.amount,
-      t.taxAmount,
-      t.paymentMethod,
-      t.status,
-      t.reference,
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `BusinessOS_General_Ledger_${currentOrg.name.replace(/\s+/g, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToCSV(
+      `General_Ledger_${currentOrg.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`,
+      [
+        { label: 'Date', key: 'date' },
+        { label: 'Type', key: 'type', format: (val) => val.toUpperCase() },
+        { label: 'Category', key: 'category' },
+        { label: 'Description', key: 'description' },
+        { label: `Amount (${currentOrg.currency})`, key: 'amount' },
+        { label: `Tax (${currentOrg.currency})`, key: 'taxAmount' },
+        { label: 'Payment Method', key: 'paymentMethod' },
+        { label: 'Status', key: 'status' },
+        { label: 'Reference Code', key: 'reference' },
+      ],
+      displayedTransactions
+    );
+  };
+
+  const handleExportPDF = () => {
+    exportToPDF({
+      title: 'General Financial Ledger & Balance Record',
+      subtitle: `Official Statement & Audit Trail for ${currentOrg.name}`,
+      organizationName: currentOrg.name,
+      columns: [
+        { label: 'Date', key: 'date' },
+        { label: 'Type', key: 'type', format: (v) => v.toUpperCase() },
+        { label: 'Category', key: 'category' },
+        { label: 'Description', key: 'description' },
+        { label: `Amount (${currencySymbol})`, key: 'amount', format: (v) => `${currencySymbol} ${v.toLocaleString()}` },
+        { label: 'Payment Method', key: 'paymentMethod' },
+        { label: 'Status', key: 'status' },
+        { label: 'Reference', key: 'reference' },
+      ],
+      data: displayedTransactions,
+      summaryMetrics: [
+        { label: 'Total Realized Inflow', value: `${currencySymbol} ${totalIncome.toLocaleString()}` },
+        { label: 'Total Expenses', value: `${currencySymbol} ${totalExpense.toLocaleString()}` },
+        { label: 'Net Profit Margin', value: `${currencySymbol} ${netProfit.toLocaleString()}` },
+        { label: 'Filtered Transactions', value: displayedTransactions.length },
+      ],
+    });
   };
 
   return (
@@ -152,14 +174,23 @@ export const FinanceModule: React.FC<FinanceModuleProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="Download CSV of currently filtered ledger entries"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
           </button>
           <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="Generate executive PDF report of financial ledger"
+          >
+            <FileText className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Export PDF</span>
+          </button>
+          <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Record Transaction</span>

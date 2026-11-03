@@ -18,6 +18,11 @@ import {
   ShieldAlert,
   ChevronLeft,
   ChevronRight,
+  Globe,
+  Headphones,
+  Dna,
+  Gamepad2,
+  ShieldCheck,
 } from 'lucide-react';
 import { Role } from '../types';
 
@@ -78,12 +83,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'bi', label: 'Business Intelligence', icon: BarChart3 },
         { id: 'ai_copilot', label: 'Gemini AI Assistant', icon: Bot, highlight: true },
+        { id: 'grounded_ai', label: 'Search & Maps Grounding', icon: Globe },
+        { id: 'audio_ai', label: 'Voice & Audio AI', icon: Headphones },
+        { id: 'bioscience', label: 'Bioscience & Pharma Lab', icon: Dna },
+        { id: 'drone_sim_3d', label: '3D Drone Logistics Sim', icon: Gamepad2, highlight: true },
         { id: 'simulator', label: 'Health & Risk Simulator', icon: Activity },
       ],
     },
     {
       title: 'SYSTEM & GOVERNANCE',
       items: [
+        { id: 'audit_log', label: 'Audit Trail & Compliance', icon: ShieldCheck, highlight: true },
         { id: 'documents', label: 'Documents & Reports', icon: FileText },
         { id: 'workflows', label: 'Automated Workflows', icon: Workflow },
         { id: 'subscription', label: 'Subscription & SaaS', icon: CreditCard },
